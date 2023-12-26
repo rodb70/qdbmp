@@ -200,7 +200,7 @@ BMP* BMP_ReadFile(const char *filename)
         return NULL;
     }
 
-/* Allocate */
+    /* Allocate */
     bmp = calloc( 1, sizeof(BMP) );
     if( bmp == NULL )
     {
@@ -208,7 +208,7 @@ BMP* BMP_ReadFile(const char *filename)
         return NULL;
     }
 
-/* Open file */
+    /* Open file */
     f = fopen( filename, "rb" );
     if( f == NULL )
     {
@@ -217,7 +217,7 @@ BMP* BMP_ReadFile(const char *filename)
         return NULL;
     }
 
-/* Read header */
+    /* Read header */
     if( ReadHeader( bmp, f ) != BMP_OK || bmp->Header.Magic != 0x4D42 )
     {
         BMP_LAST_ERROR_CODE = BMP_FILE_INVALID;
@@ -226,9 +226,10 @@ BMP* BMP_ReadFile(const char *filename)
         return NULL;
     }
 
-/* Verify that the bitmap variant is supported */
-    if( (bmp->Header.BitsPerPixel != 32 && bmp->Header.BitsPerPixel != 24 && bmp->Header.BitsPerPixel != 8)
-            || bmp->Header.CompressionType != 0 || bmp->Header.HeaderSize != 40 )
+    /* Verify that the bitmap variant is supported */
+    if(( bmp->Header.BitsPerPixel != 32 && bmp->Header.BitsPerPixel != 24 &&
+         bmp->Header.BitsPerPixel != 8) || bmp->Header.CompressionType != 0 ||
+                                           bmp->Header.HeaderSize != 40 )
     {
         BMP_LAST_ERROR_CODE = BMP_FILE_NOT_SUPPORTED;
         fclose( f );
@@ -236,7 +237,7 @@ BMP* BMP_ReadFile(const char *filename)
         return NULL;
     }
 
-/* Allocate and read palette */
+    /* Allocate and read palette */
     if( bmp->Header.BitsPerPixel == 8 )
     {
         bmp->Palette = (uint8_t*) malloc( BMP_PALETTE_SIZE * sizeof(uint8_t) );
@@ -286,6 +287,12 @@ BMP* BMP_ReadFile(const char *filename)
             free( bmp );
             return NULL;
         }
+        if( 0 != ( bmp->Header.Width % sizeof( uint32_t)))
+        {
+            uint8_t leftover[ sizeof( uint32_t)] = {0};
+            uint32_t remainder = sizeof( uint32_t) - ( bmp->Header.Width % sizeof( uint32_t));
+            fread( leftover, sizeof(uint8_t), remainder, f );
+        }
     }
 
 
@@ -309,7 +316,7 @@ void BMP_WriteFile(BMP *bmp, const char *filename)
         return;
     }
 
-/* Open file */
+    /* Open file */
     f = fopen( filename, "wb" );
     if( f == NULL )
     {
@@ -317,7 +324,7 @@ void BMP_WriteFile(BMP *bmp, const char *filename)
         return;
     }
 
-/* Write header */
+    /* Write header */
     if( WriteHeader( bmp, f ) != BMP_OK )
     {
         BMP_LAST_ERROR_CODE = BMP_IO_ERROR;
@@ -325,7 +332,7 @@ void BMP_WriteFile(BMP *bmp, const char *filename)
         return;
     }
 
-/* Write palette */
+    /* Write palette */
     if( bmp->Palette )
     {
         if( fwrite( bmp->Palette, sizeof(uint8_t), BMP_PALETTE_SIZE, f ) != BMP_PALETTE_SIZE )
@@ -336,12 +343,23 @@ void BMP_WriteFile(BMP *bmp, const char *filename)
         }
     }
 
-/* Write data */
-    if( fwrite( bmp->Data, sizeof(uint8_t), bmp->Header.ImageDataSize, f ) != bmp->Header.ImageDataSize )
+    /* Write data */
+    for( int idx = (bmp->Header.Height - 1) * bmp->Header.Width; idx >= 0; idx -= bmp->Header.Width )
     {
-        BMP_LAST_ERROR_CODE = BMP_IO_ERROR;
-        fclose( f );
-        return;
+        //if( fread( bmp->Data + idx, sizeof(uint8_t), bmp->Header.Width, f ) != bmp->Header.Width )
+        if( fwrite( bmp->Data + idx, sizeof(uint8_t), bmp->Header.Width, f ) != bmp->Header.ImageDataSize )
+        {
+            BMP_LAST_ERROR_CODE = BMP_IO_ERROR;
+            fclose( f );
+            return;
+        }
+        /* reads are 32-bit aligned */
+        if( 0 != ( bmp->Header.Width % sizeof( uint32_t)))
+        {
+            uint8_t leftover[ sizeof( uint32_t)] = {0};
+            uint32_t remainder = sizeof( uint32_t) - ( bmp->Header.Width % sizeof( uint32_t));
+            fwrite( leftover, sizeof(uint8_t), remainder, f );
+        }
     }
 
     BMP_LAST_ERROR_CODE = BMP_OK;
@@ -406,7 +424,7 @@ void BMP_GetPixelRGB(BMP *bmp, uint32_t x, uint32_t y, uint8_t *r, uint8_t *g, u
     uint32_t bytes_per_row;
     uint8_t bytes_per_pixel;
 
-    if( bmp == NULL || x < 0 || x >= bmp->Header.Width || y < 0 || y >= bmp->Header.Height )
+    if( bmp == NULL || x >= bmp->Header.Width || y >= bmp->Header.Height )
     {
         BMP_LAST_ERROR_CODE = BMP_INVALID_ARGUMENT;
     }
@@ -416,13 +434,13 @@ void BMP_GetPixelRGB(BMP *bmp, uint32_t x, uint32_t y, uint8_t *r, uint8_t *g, u
 
         bytes_per_pixel = bmp->Header.BitsPerPixel >> 3;
 
-/* Row's size is rounded up to the next multiple of 4 bytes */
+        /* Row's size is rounded up to the next multiple of 4 bytes */
         bytes_per_row = bmp->Header.ImageDataSize / bmp->Header.Height;
 
-/* Calculate the location of the relevant pixel (rows are flipped) */
+        /* Calculate the location of the relevant pixel (rows are flipped) */
         pixel = bmp->Data + ((bmp->Header.Height - y - 1) * bytes_per_row + x * bytes_per_pixel);
 
-/* In indexed color mode the pixel's value is an index within the palette */
+        /* In indexed color mode the pixel's value is an index within the palette */
         if( bmp->Header.BitsPerPixel == 8 )
         {
             pixel = bmp->Palette + *pixel * 4;
@@ -447,7 +465,7 @@ void BMP_SetPixelRGB(BMP *bmp, uint32_t x, uint32_t y, uint8_t r, uint8_t g, uin
     uint32_t bytes_per_row;
     uint8_t bytes_per_pixel;
 
-    if( bmp == NULL || x < 0 || x >= bmp->Header.Width || y < 0 || y >= bmp->Header.Height )
+    if( bmp == NULL || x >= bmp->Header.Width || y >= bmp->Header.Height )
     {
         BMP_LAST_ERROR_CODE = BMP_INVALID_ARGUMENT;
     }
@@ -463,13 +481,13 @@ void BMP_SetPixelRGB(BMP *bmp, uint32_t x, uint32_t y, uint8_t r, uint8_t g, uin
 
         bytes_per_pixel = bmp->Header.BitsPerPixel >> 3;
 
-/* Row's size is rounded up to the next multiple of 4 bytes */
+        /* Row's size is rounded up to the next multiple of 4 bytes */
         bytes_per_row = bmp->Header.ImageDataSize / bmp->Header.Height;
 
-/* Calculate the location of the relevant pixel (rows are flipped) */
+        /* Calculate the location of the relevant pixel (rows are flipped) */
         pixel = bmp->Data + ((bmp->Header.Height - y - 1) * bytes_per_row + x * bytes_per_pixel);
 
-/* Note: colors are stored in BGR order */
+        /* Note: colors are stored in BGR order */
         *(pixel + 2) = r;
         *(pixel + 1) = g;
         *(pixel + 0) = b;
@@ -484,7 +502,7 @@ void BMP_GetPixelIndex(BMP *bmp, uint32_t x, uint32_t y, uint8_t *val)
     uint8_t *pixel;
     uint32_t bytes_per_row;
 
-    if( bmp == NULL || x < 0 || x >= bmp->Header.Width || y < 0 || y >= bmp->Header.Height )
+    if( bmp == NULL || x >= bmp->Header.Width || y >= bmp->Header.Height )
     {
         BMP_LAST_ERROR_CODE = BMP_INVALID_ARGUMENT;
     }
@@ -517,7 +535,7 @@ void BMP_SetPixelIndex(BMP *bmp, uint32_t x, uint32_t y, uint8_t val)
     uint8_t *pixel;
     uint32_t bytes_per_row;
 
-    if( bmp == NULL || x < 0 || x >= bmp->Header.Width || y < 0 || y >= bmp->Header.Height )
+    if( bmp == NULL || x >= bmp->Header.Width || y >= bmp->Header.Height )
     {
         BMP_LAST_ERROR_CODE = BMP_INVALID_ARGUMENT;
     }
@@ -531,10 +549,10 @@ void BMP_SetPixelIndex(BMP *bmp, uint32_t x, uint32_t y, uint8_t val)
     {
         BMP_LAST_ERROR_CODE = BMP_OK;
 
-/* Row's size is rounded up to the next multiple of 4 bytes */
+        /* Row's size is rounded up to the next multiple of 4 bytes */
         bytes_per_row = bmp->Header.ImageDataSize / bmp->Header.Height;
 
-/* Calculate the location of the relevant pixel */
+        /* Calculate the location of the relevant pixel */
         pixel = bmp->Data + ((bmp->Header.Height - y - 1) * bytes_per_row + x);
 
         *pixel = val;
