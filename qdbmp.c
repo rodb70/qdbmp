@@ -262,7 +262,7 @@ BMP* BMP_ReadFile(const char *filename)
         bmp->Palette = NULL;
     }
 
-/* Allocate memory for image data */
+    /* Allocate memory for image data */
     bmp->Data = (uint8_t*) malloc( bmp->Header.ImageDataSize );
     if( bmp->Data == NULL )
     {
@@ -273,16 +273,21 @@ BMP* BMP_ReadFile(const char *filename)
         return NULL;
     }
 
-/* Read image data */
-    if( fread( bmp->Data, sizeof(uint8_t), bmp->Header.ImageDataSize, f ) != bmp->Header.ImageDataSize )
+    /* Read image data */
+    /* read the bitmap in reverse order */
+    for( int idx = (bmp->Header.Height - 1) * bmp->Header.Width; idx >= 0; idx -= bmp->Header.Width )
     {
-        BMP_LAST_ERROR_CODE = BMP_FILE_INVALID;
-        fclose( f );
-        free( bmp->Data );
-        free( bmp->Palette );
-        free( bmp );
-        return NULL;
+        if( fread( bmp->Data + idx, sizeof(uint8_t), bmp->Header.Width, f ) != bmp->Header.Width )
+        {
+            BMP_LAST_ERROR_CODE = BMP_FILE_INVALID;
+            fclose( f );
+            free( bmp->Data );
+            free( bmp->Palette );
+            free( bmp );
+            return NULL;
+        }
     }
+
 
     fclose( f );
 
