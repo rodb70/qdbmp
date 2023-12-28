@@ -291,7 +291,8 @@ BMP* BMP_ReadFile(const char *filename)
         {
             uint8_t leftover[ sizeof( uint32_t)] = {0};
             uint32_t remainder = sizeof( uint32_t) - ( bmp->Header.Width % sizeof( uint32_t));
-            fread( leftover, sizeof(uint8_t), remainder, f );
+            size_t rslt_read = fread( leftover, sizeof(uint8_t), remainder, f );
+            (void)rslt_read;
         }
     }
 
@@ -346,7 +347,6 @@ void BMP_WriteFile(BMP *bmp, const char *filename)
     /* Write data */
     for( int idx = (bmp->Header.Height - 1) * bmp->Header.Width; idx >= 0; idx -= bmp->Header.Width )
     {
-        //if( fread( bmp->Data + idx, sizeof(uint8_t), bmp->Header.Width, f ) != bmp->Header.Width )
         if( fwrite( bmp->Data + idx, sizeof(uint8_t), bmp->Header.Width, f ) != bmp->Header.ImageDataSize )
         {
             BMP_LAST_ERROR_CODE = BMP_IO_ERROR;
